@@ -11,6 +11,11 @@ authors = [
 description = "A Python SDK for the IronBeam API"
 readme = "README.md"
 requires-python = ">=3.7"
+dependencies = [
+    "requests",
+    "pydantic",
+    "websockets"
+]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",

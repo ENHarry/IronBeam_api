@@ -1,4 +1,5 @@
 import requests
+from .exceptions import AuthenticationError, InvalidRequestError
 
 class IronBeam:
     def __init__(self, api_key, username, password=None):
@@ -18,6 +19,10 @@ class IronBeam:
             payload["password"] = self.password
         
         response = requests.post(f"{self.base_url}/auth", json=payload)
+        if response.status_code == 401:
+            raise AuthenticationError("Unauthorized: Invalid API key or credentials.")
+        if response.status_code == 400:
+            raise InvalidRequestError(f"Invalid request: {response.text}")
         response.raise_for_status()
         self.token = response.json().get("token")
         return self.token
@@ -151,3 +156,11 @@ class IronBeam:
         response = requests.post(f"{self.base_url}/simulatedAccountAdd", headers=headers, json=account_details)
         response.raise_for_status()
         return response.json()
+
+    def create_stream(self):
+        """Create a new stream for websocket communication."""
+        headers = self._get_headers()
+        response = requests.get(f"{self.base_url}/stream/create", headers=headers)
+        response.raise_for_status()
+        stream_id = response.json().get("streamId")
+        return stream_id
