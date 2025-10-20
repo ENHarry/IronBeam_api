@@ -164,3 +164,368 @@ class IronBeam:
         response.raise_for_status()
         stream_id = response.json().get("streamId")
         return stream_id
+
+    # ==================== Authentication Endpoints ====================
+
+    def logout(self):
+        """Logout and invalidate the current token."""
+        headers = self._get_headers()
+        response = requests.post(f"{self.base_url}/logout", headers=headers)
+        response.raise_for_status()
+        self.token = None
+        return response.json()
+
+    # ==================== Information Endpoints ====================
+
+    def get_user_info(self):
+        """Get user information."""
+        headers = self._get_headers()
+        response = requests.get(f"{self.base_url}/info/user", headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    def get_security_margin(self, symbols):
+        """Get security margin and value information.
+
+        Args:
+            symbols: List of symbols (e.g., ["XCME:ES.Z24", "XCEC:GC.Q24"])
+        """
+        headers = self._get_headers()
+        params = {"symbols": ",".join(symbols)}
+        response = requests.get(f"{self.base_url}/info/security/margin", headers=headers, params=params)
+        response.raise_for_status()
+        return response.json()
+
+    def get_security_status(self, symbols):
+        """Get security status information.
+
+        Args:
+            symbols: List of symbols
+        """
+        headers = self._get_headers()
+        params = {"symbols": ",".join(symbols)}
+        response = requests.get(f"{self.base_url}/info/security/status", headers=headers, params=params)
+        response.raise_for_status()
+        return response.json()
+
+    def get_exchange_sources(self):
+        """Get list of available exchange sources."""
+        headers = self._get_headers()
+        response = requests.get(f"{self.base_url}/info/exchangeSources", headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    def get_complexes(self, exchange):
+        """Get market complexes for an exchange.
+
+        Args:
+            exchange: Exchange code (e.g., "CME", "CBOT")
+        """
+        headers = self._get_headers()
+        response = requests.get(f"{self.base_url}/info/complexes/{exchange}", headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    def search_futures(self, exchange, market_group):
+        """Search for futures symbols.
+
+        Args:
+            exchange: Exchange code
+            market_group: Market group
+        """
+        headers = self._get_headers()
+        response = requests.get(f"{self.base_url}/info/symbol/search/futures/{exchange}/{market_group}", headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    def search_option_groups(self, complex):
+        """Search for option symbol groups.
+
+        Args:
+            complex: Complex identifier
+        """
+        headers = self._get_headers()
+        response = requests.get(f"{self.base_url}/info/symbol/search/groups/{complex}", headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    def search_options(self, symbol):
+        """Search for option symbols.
+
+        Args:
+            symbol: Underlying symbol
+        """
+        headers = self._get_headers()
+        response = requests.get(f"{self.base_url}/info/symbol/search/options/{symbol}", headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    def search_option_spreads(self, symbol):
+        """Search for option spread symbols.
+
+        Args:
+            symbol: Underlying symbol
+        """
+        headers = self._get_headers()
+        response = requests.get(f"{self.base_url}/info/symbol/search/options/spreads/{symbol}", headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    def get_strategy_id(self, account_id, order_ids):
+        """Get strategy ID for a list of order IDs.
+
+        Args:
+            account_id: Account ID
+            order_ids: List of order IDs
+        """
+        headers = self._get_headers()
+        params = {"orderIds": ",".join(order_ids)}
+        response = requests.get(f"{self.base_url}/info/strategyId", headers=headers, params=params)
+        response.raise_for_status()
+        return response.json()
+
+    # ==================== Order Management Endpoints ====================
+
+    def cancel_multiple_orders(self, account_id, order_ids):
+        """Cancel multiple orders at once.
+
+        Args:
+            account_id: Account ID
+            order_ids: List of order IDs to cancel
+        """
+        headers = self._get_headers()
+        payload = {"orderIds": order_ids}
+        response = requests.delete(f"{self.base_url}/order/{account_id}/cancelMultiple", headers=headers, json=payload)
+        response.raise_for_status()
+        return response.json()
+
+    def get_to_order_id(self, account_id, strategy_id):
+        """Convert strategy ID to order ID.
+
+        Args:
+            account_id: Account ID
+            strategy_id: Strategy ID
+        """
+        headers = self._get_headers()
+        response = requests.get(f"{self.base_url}/order/{account_id}/toorderid/{strategy_id}", headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    def get_to_strategy_id(self, account_id, order_id):
+        """Convert order ID to strategy ID.
+
+        Args:
+            account_id: Account ID
+            order_id: Order ID
+        """
+        headers = self._get_headers()
+        response = requests.get(f"{self.base_url}/order/{account_id}/tostrategyId/{order_id}", headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    # ==================== Simulated Account Management ====================
+
+    def simulated_account_reset(self, account_id, password):
+        """Reset a simulated account to initial state.
+
+        Args:
+            account_id: Account ID to reset
+            password: Account password
+        """
+        headers = self._get_headers()
+        payload = {"accountId": account_id, "password": password}
+        response = requests.put(f"{self.base_url}/simulatedAccountReset", headers=headers, json=payload)
+        response.raise_for_status()
+        return response.json()
+
+    def simulated_account_expire(self, account_id, password):
+        """Expire a simulated account.
+
+        Args:
+            account_id: Account ID to expire
+            password: Account password
+        """
+        headers = self._get_headers()
+        payload = {"accountId": account_id, "password": password}
+        response = requests.delete(f"{self.base_url}/simulatedAccountExpire", headers=headers, json=payload)
+        response.raise_for_status()
+        return response.json()
+
+    def simulated_account_add_cash(self, account_id, password, amount, currency="USD"):
+        """Add cash to a simulated account.
+
+        Args:
+            account_id: Account ID
+            password: Account password
+            amount: Amount to add
+            currency: Currency code (default: USD)
+        """
+        headers = self._get_headers()
+        payload = {
+            "accountId": account_id,
+            "password": password,
+            "amount": amount,
+            "currency": currency
+        }
+        response = requests.post(f"{self.base_url}/simulatedAccount/addCash", headers=headers, json=payload)
+        response.raise_for_status()
+        return response.json()
+
+    def simulated_account_get_cash_report(self, account_id):
+        """Get cash report for a simulated account.
+
+        Args:
+            account_id: Account ID
+        """
+        headers = self._get_headers()
+        response = requests.get(f"{self.base_url}/simulatedAccount/getCashReport/{account_id}", headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    # ==================== Streaming Subscription Endpoints ====================
+
+    def subscribe_quotes(self, stream_id, symbols):
+        """Subscribe to quote updates for symbols.
+
+        Args:
+            stream_id: Stream ID from create_stream()
+            symbols: List of symbols to subscribe
+        """
+        headers = self._get_headers()
+        params = {"symbols": ",".join(symbols)}
+        response = requests.get(f"{self.base_url}/market/quotes/subscribe/{stream_id}", headers=headers, params=params)
+        response.raise_for_status()
+        return response.json()
+
+    def subscribe_depths(self, stream_id, symbols):
+        """Subscribe to market depth updates for symbols.
+
+        Args:
+            stream_id: Stream ID from create_stream()
+            symbols: List of symbols to subscribe
+        """
+        headers = self._get_headers()
+        params = {"symbols": ",".join(symbols)}
+        response = requests.get(f"{self.base_url}/market/depths/subscribe/{stream_id}", headers=headers, params=params)
+        response.raise_for_status()
+        return response.json()
+
+    def subscribe_trades(self, stream_id, symbols):
+        """Subscribe to trade updates for symbols.
+
+        Args:
+            stream_id: Stream ID from create_stream()
+            symbols: List of symbols to subscribe
+        """
+        headers = self._get_headers()
+        params = {"symbols": ",".join(symbols)}
+        response = requests.get(f"{self.base_url}/market/trades/subscribe/{stream_id}", headers=headers, params=params)
+        response.raise_for_status()
+        return response.json()
+
+    def unsubscribe_quotes(self, stream_id, symbols):
+        """Unsubscribe from quote updates.
+
+        Args:
+            stream_id: Stream ID
+            symbols: List of symbols to unsubscribe
+        """
+        headers = self._get_headers()
+        params = {"symbols": ",".join(symbols)}
+        response = requests.get(f"{self.base_url}/market/quotes/unsubscribe/{stream_id}", headers=headers, params=params)
+        response.raise_for_status()
+        return response.json()
+
+    def unsubscribe_depths(self, stream_id, symbols):
+        """Unsubscribe from market depth updates.
+
+        Args:
+            stream_id: Stream ID
+            symbols: List of symbols to unsubscribe
+        """
+        headers = self._get_headers()
+        params = {"symbols": ",".join(symbols)}
+        response = requests.get(f"{self.base_url}/market/depths/unsubscribe/{stream_id}", headers=headers, params=params)
+        response.raise_for_status()
+        return response.json()
+
+    def unsubscribe_trades(self, stream_id, symbols):
+        """Unsubscribe from trade updates.
+
+        Args:
+            stream_id: Stream ID
+            symbols: List of symbols to unsubscribe
+        """
+        headers = self._get_headers()
+        params = {"symbols": ",".join(symbols)}
+        response = requests.get(f"{self.base_url}/market/trades/unsubscribe/{stream_id}", headers=headers, params=params)
+        response.raise_for_status()
+        return response.json()
+
+    def subscribe_tick_bars(self, stream_id, symbol, bar_size):
+        """Subscribe to tick bar indicator.
+
+        Args:
+            stream_id: Stream ID
+            symbol: Symbol to subscribe
+            bar_size: Number of ticks per bar
+        """
+        headers = self._get_headers()
+        payload = {"exchSym": symbol, "barSize": bar_size}
+        response = requests.post(f"{self.base_url}/indicator/{stream_id}/tickBars/subscribe", headers=headers, json=payload)
+        response.raise_for_status()
+        return response.json()
+
+    def subscribe_trade_bars(self, stream_id, symbol, bar_size):
+        """Subscribe to trade bar indicator.
+
+        Args:
+            stream_id: Stream ID
+            symbol: Symbol to subscribe
+            bar_size: Number of trades per bar
+        """
+        headers = self._get_headers()
+        payload = {"exchSym": symbol, "barSize": bar_size}
+        response = requests.post(f"{self.base_url}/indicator/{stream_id}/tradeBars/subscribe", headers=headers, json=payload)
+        response.raise_for_status()
+        return response.json()
+
+    def subscribe_time_bars(self, stream_id, symbol, bar_size):
+        """Subscribe to time bar indicator.
+
+        Args:
+            stream_id: Stream ID
+            symbol: Symbol to subscribe
+            bar_size: Time period in seconds
+        """
+        headers = self._get_headers()
+        payload = {"exchSym": symbol, "barSize": bar_size}
+        response = requests.post(f"{self.base_url}/indicator/{stream_id}/timeBars/subscribe", headers=headers, json=payload)
+        response.raise_for_status()
+        return response.json()
+
+    def subscribe_volume_bars(self, stream_id, symbol, bar_size):
+        """Subscribe to volume bar indicator.
+
+        Args:
+            stream_id: Stream ID
+            symbol: Symbol to subscribe
+            bar_size: Volume per bar
+        """
+        headers = self._get_headers()
+        payload = {"exchSym": symbol, "barSize": bar_size}
+        response = requests.post(f"{self.base_url}/indicator/{stream_id}/volumeBars/subscribe", headers=headers, json=payload)
+        response.raise_for_status()
+        return response.json()
+
+    def unsubscribe_indicator(self, stream_id, indicator_id):
+        """Unsubscribe from an indicator.
+
+        Args:
+            stream_id: Stream ID
+            indicator_id: Indicator ID to unsubscribe
+        """
+        headers = self._get_headers()
+        response = requests.delete(f"{self.base_url}/indicator/{stream_id}/unsubscribe/{indicator_id}", headers=headers)
+        response.raise_for_status()
+        return response.json()
