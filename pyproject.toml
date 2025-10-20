@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "ironbeam_api"
 version = "0.0.1"
 authors = [
-  { name="Your Name", email="you@example.com" },
+  { name="Naina Tech Inc", email="you@example.com" },
 ]
 description = "A Python SDK for the IronBeam API"
 readme = "README.md"

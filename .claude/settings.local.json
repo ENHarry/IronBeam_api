@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(test -f setup.py)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
