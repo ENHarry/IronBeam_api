@@ -1,7 +1,15 @@
 {
+  "includeCoAuthoredBy": false,
   "permissions": {
     "allow": [
-      "Bash(test -f setup.py)"
+      "Bash(test -f setup.py)",
+      "Bash(test -f LICENSE)",
+      "Bash(test -f MANIFEST.in)",
+      "Bash(python:*)",
+      "Bash(timeout 60 python:*)",
+      "Bash(..fin_venvScriptspython.exe hft_bracket_breakeven.py)",
+      "Bash(../fin_venv/Scripts/python.exe:*)",
+      "Bash(timeout 60 ../fin_venv/Scripts/python.exe:*)"
     ],
     "deny": [],
     "ask": []

@@ -8,14 +8,15 @@ Complete usage examples for all 48 API endpoints plus trade management features.
 |------|-----------|--------|-------------|
 | [09_quick_reference.py](09_quick_reference.py) | All (48) | ✅ Complete | One-liner examples for every function |
 | [01_authentication_examples.py](01_authentication_examples.py) | 2 | ✅ Complete | Authentication and logout |
+| [01_authentication_basics.py](01_authentication_basics.py) | 5 Examples | ✅ Complete | Comprehensive authentication patterns |
+| [02_account_management.py](02_account_management.py) | 5 Examples | ✅ Complete | Comprehensive account queries and positions |
+| [03_market_data.py](03_market_data.py) | 7 Examples | ✅ Complete | Comprehensive market data retrieval |
+| [04_order_management.py](04_order_management.py) | 11 Examples | ✅ Complete | Comprehensive order types and management |
+| [05_streaming_websocket.py](05_streaming_websocket.py) | 4 Examples | ✅ Complete | Comprehensive WebSocket streaming |
 | [auto_breakeven_example.py](auto_breakeven_example.py) | Trade Mgmt | ✅ Complete | Auto breakeven usage |
 | [running_tp_example.py](running_tp_example.py) | Trade Mgmt | ✅ Complete | Running take profit strategies |
 | [combined_strategy_example.py](combined_strategy_example.py) | Trade Mgmt | ✅ Complete | Both features together |
-| 02_account_examples.py | 6 | 📝 Template | Account information |
-| 03_market_data_examples.py | 6 | 📝 Template | Market data feeds |
-| 04_order_management_examples.py | 8 | 📝 Template | Trading operations |
-| 05_symbol_search_examples.py | 9 | 📝 Template | Symbol lookups |
-| 06_streaming_examples.py | 13 | 📝 Template | WebSocket streaming |
+| 06_streaming_examples.py | 13 | 📝 Template | Advanced streaming features |
 | 07_simulated_accounts_examples.py | 6 | 📝 Template | Demo accounts |
 | 08_trade_management_workflows.py | N/A | 📝 Template | Complete workflows |
 

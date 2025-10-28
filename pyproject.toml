@@ -1,27 +1,68 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ironbeam_api"
-version = "0.0.1"
+name = "ironbeam-sdk"
+version = "0.1.0"
 authors = [
-  { name="Naina Tech Inc", email="you@example.com" },
+  { name="Naina Tech", email="packages@nainatechcorp.com" },
 ]
-description = "A Python SDK for the IronBeam API"
+description = "Comprehensive Python SDK for IronBeam API with automated trade management features"
 readme = "README.md"
 requires-python = ">=3.7"
-dependencies = [
-    "requests",
-    "pydantic",
-    "websockets"
+keywords = [
+    "trading",
+    "futures",
+    "ironbeam",
+    "api",
+    "sdk",
+    "algorithmic-trading",
+    "automated-trading",
+    "finance",
+    "derivatives"
 ]
+license = "MIT"
 classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
     "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+dependencies = [
+    "requests>=2.28.0",
+    "pydantic>=1.10.0,<3.0.0",
+    "websockets>=10.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
 ]
 
 [project.urls]
 "Homepage" = "https://github.com/ENHarry/IronBeam_api"
 "Bug Tracker" = "https://github.com/ENHarry/IronBeam_api/issues"
+"Documentation" = "https://github.com/ENHarry/IronBeam_api#readme"
+"Source Code" = "https://github.com/ENHarry/IronBeam_api"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ironbeam*"]
+exclude = ["tests*", "python-client*", "node_modules*"]
+
+[tool.setuptools.package-data]
+ironbeam = ["py.typed"]

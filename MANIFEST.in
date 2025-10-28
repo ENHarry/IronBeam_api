@@ -1,0 +1,33 @@
+# Include documentation files
+include README.md
+include LICENSE
+include QUICK_START.md
+include MBO_DATA_GUIDE.md
+include CLEANUP_SUMMARY.md
+
+# Include package metadata
+include pyproject.toml
+
+# Include type hints marker
+include ironbeam/py.typed
+
+# Exclude unnecessary files
+exclude .env
+exclude .gitignore
+exclude package.json
+exclude openapi.json
+exclude hft_bracket_breakeven.py
+
+# Exclude development directories
+recursive-exclude tests *
+recursive-exclude examples *
+recursive-exclude __pycache__ *
+recursive-exclude *.egg-info *
+recursive-exclude .git *
+recursive-exclude .claude *
+
+# Exclude compiled Python files
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude *.pyd
+global-exclude .DS_Store

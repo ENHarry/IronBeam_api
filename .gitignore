@@ -93,3 +93,13 @@ cython_debug/
 
 # OpenAPI
 openapi.json
+
+# Claude
+.claude/*
+.claude/settings.local.json
+.claude
+
+.gitignore
+
+PUBLISHING_GUIDE.md
+PACKAGE_PUBLICATION_SUMMARY.md
