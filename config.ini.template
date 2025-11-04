@@ -1,0 +1,24 @@
+# IronBeam Demo Account Reset Configuration
+# Copy this file to config.ini and fill in your credentials
+# IMPORTANT: Add config.ini to .gitignore to keep credentials secure!
+
+[ironbeam]
+# Your IronBeam API credentials
+api_key = YOUR_API_KEY_HERE
+username = YOUR_USERNAME_HERE  
+password = YOUR_PASSWORD_HERE
+
+# Account to reset
+account_id = YOUR_ACCOUNT_ID_HERE
+
+# Template to use for reset (XAP50, XAP100, XAP150)
+# XAP50  = $50,000 starting balance
+# XAP100 = $100,000 starting balance  
+# XAP150 = $150,000 starting balance
+template = XAP100
+
+# API base URL (demo environment)
+base_url = https://demo.ironbeamapi.com/v2
+
+# For live environment, use:
+# base_url = https://api.ironbeamapi.com/v2

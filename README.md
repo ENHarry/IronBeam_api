@@ -2,20 +2,38 @@
 
 [![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Status: Production Ready](https://img.shields.io/badge/status-production_ready-green.svg)](https://github.com/ENHarry/IronBeam_api)
 
-A comprehensive Python SDK for the IronBeam API with automated trade and risk management.
+A comprehensive, production-ready Python SDK for the IronBeam API with automated trade and risk management, real-time WebSocket streaming, and robust field name compatibility.
 
 ## Features
 
 ### Core API Client
 - ✅ **Full API Coverage**: All 49 IronBeam API endpoints implemented
+- ✅ **Robust Field Compatibility**: Handles both API format ('s', 'b', 'a') and SDK format ('exchSym', 'bidPrice', 'askPrice') automatically
+- ✅ **Pydantic v2 Models**: Full type safety with dual field name validation using AliasChoices
+- ✅ **Bracket Order Support**: Comprehensive support for stop-loss and take-profit orders with proper field serialization
 - ✅ **Authentication**: Secure token-based authentication with logout support
 - ✅ **Account Management**: Balance, positions, risk, fills, orders
 - ✅ **Market Data**: Quotes, depth, trades, historical data
 - ✅ **Order Management**: Place, update, cancel orders (single & batch)
 - ✅ **Symbol Search**: Futures, options, spreads, security definitions
 - ✅ **Simulated Trading**: Demo account management and cash operations
-- ✅ **Pydantic Models**: Full type safety with validation
+
+### API Field Compatibility 🔧
+The SDK intelligently handles field name variations between API responses and SDK expectations:
+
+**Quote Data Fields**:
+- `s` / `exchSym` - Exchange symbol
+- `b` / `bidPrice` - Bid price 
+- `a` / `askPrice` - Ask price
+- `bs` / `bidSize` - Bid size
+- `as` / `askSize` - Ask size
+
+**Order Fields**:
+- Automatically serializes to camelCase for API requests
+- Validates both abbreviated and full field names in responses
+- Ensures bracket orders work correctly with stop-loss/take-profit fields
 
 ### Advanced Streaming
 - ✅ **WebSocket Support**: Real-time market data streaming
@@ -65,14 +83,28 @@ Dynamically adjusts take profit with multiple strategies:
 
 ## Installation
 
+### Via pip (Recommended)
 ```bash
+pip install ironbeam-sdk
+```
+
+### Development Installation
+```bash
+git clone https://github.com/ENHarry/IronBeam_api.git
+cd IronBeam_api
 pip install -e .
 ```
 
-Or install dependencies:
+### Manual Installation
 ```bash
-pip install requests pydantic websockets
+pip install requests pydantic>=2.0 websockets
 ```
+
+### Requirements
+- **Python**: 3.7+
+- **Pydantic**: 2.0+ (for AliasChoices field compatibility)
+- **requests**: HTTP client for REST API
+- **websockets**: WebSocket streaming support
 
 ## Quick Start
 
@@ -94,16 +126,35 @@ trader_info = client.get_trader_info()
 balance = client.get_account_balance("account_id")
 positions = client.get_positions("account_id")
 
-# Place an order
+# Get real-time quotes (handles both API formats automatically)
+quotes = client.get_quotes(["XCME:ES.Z24", "XCME:NQ.Z24"])
+for quote in quotes.quotes:
+    print(f"Symbol: {quote.exch_sym}, Bid: {quote.bid_price}, Ask: {quote.ask_price}")
+
+# Place a simple order
 order = {
     "accountId": "account_id",
-    "exchSym": "XCME:ES.Z24",
+    "exchSym": "XCME:ES.Z24", 
     "side": "BUY",
     "quantity": 1,
     "orderType": "MARKET",
     "duration": "DAY"
 }
 response = client.place_order("account_id", order)
+
+# Place a bracket order (with stop-loss and take-profit)
+bracket_order = {
+    "accountId": "account_id",
+    "exchSym": "XCME:ES.Z24",
+    "side": "BUY", 
+    "quantity": 1,
+    "orderType": "LIMIT",
+    "duration": "DAY",
+    "price": 5000.0,
+    "stopLoss": 4950.0,  # Stop loss 50 points below
+    "takeProfit": 5050.0  # Take profit 50 points above
+}
+bracket_response = client.place_order("account_id", bracket_order)
 ```
 
 ### Auto Breakeven
@@ -200,7 +251,8 @@ from ironbeam import IronBeamStream
 import asyncio
 
 async def on_quote(quote):
-    print(f"Quote: {quote}")
+    # Quotes automatically handle both API field formats
+    print(f"Quote: {quote.exch_sym} | Bid: {quote.bid_price} | Ask: {quote.ask_price}")
 
 async def main():
     stream = IronBeamStream(client)
@@ -212,6 +264,44 @@ async def main():
     await stream.listen()
 
 asyncio.run(main())
+```
+
+## Data Model Compatibility & Robustness
+
+### Field Name Flexibility
+The SDK uses Pydantic v2's `AliasChoices` to handle field name variations seamlessly:
+
+```python
+# These are equivalent - SDK handles both formats
+api_format = {"s": "XCME:ES.Z24", "b": 5000.0, "a": 5000.25}
+sdk_format = {"exchSym": "XCME:ES.Z24", "bidPrice": 5000.0, "askPrice": 5000.25}
+
+# Both work identically
+quote1 = Quote(**api_format)
+quote2 = Quote(**sdk_format)
+# quote1.exch_sym == quote2.exch_sym == "XCME:ES.Z24"
+```
+
+### Robust Response Handling
+- **Optional Fields**: Response models handle missing optional fields gracefully
+- **Mixed Formats**: Can process responses with mixed field name formats
+- **Backward Compatibility**: Maintains compatibility with existing code
+- **Type Safety**: Full Pydantic validation with proper type hints
+
+### Order Serialization
+```python
+# OrderRequest automatically serializes to API format
+order = OrderRequest(
+    account_id="12345",
+    exch_sym="XCME:ES.Z24", 
+    side="BUY",
+    quantity=1,
+    order_type="LIMIT",
+    price=5000.0,
+    stop_loss=4950.0,  # Automatically becomes "stopLoss" in API call
+    take_profit=5050.0  # Automatically becomes "takeProfit" in API call
+)
+# Results in: {"accountId": "12345", "exchSym": "XCME:ES.Z24", "stopLoss": 4950.0, ...}
 ```
 
 ## API Coverage
@@ -279,22 +369,60 @@ asyncio.run(main())
 
 ## Examples
 
-See the [examples/](examples/) directory for complete examples:
-- [auto_breakeven_example.py](examples/auto_breakeven_example.py) - Auto breakeven usage
-- [running_tp_example.py](examples/running_tp_example.py) - Running TP strategies
-- [combined_strategy_example.py](examples/combined_strategy_example.py) - Both features together
+See the comprehensive documentation and examples:
+
+### 📁 Code Examples
+- **[examples/](examples/)** - Complete working examples and tutorials:
+  - [auto_breakeven_example.py](examples/auto_breakeven_example.py) - Auto breakeven usage
+  - [running_tp_example.py](examples/running_tp_example.py) - Running TP strategies  
+  - [combined_strategy_example.py](examples/combined_strategy_example.py) - Both features together
+  - [01_authentication_examples.py](examples/01_authentication_examples.py) - Authentication patterns
+  - [02_account_management.py](examples/02_account_management.py) - Account operations
+  - [03_market_data.py](examples/03_market_data.py) - Market data access
+  - [04_order_management.py](examples/04_order_management.py) - Order placement and management
+  - [05_streaming_websocket.py](examples/05_streaming_websocket.py) - WebSocket streaming setup
+
+### 📁 Utility Scripts
+- **[scripts/](scripts/)** - Standalone utility scripts:
+  - [reset_demo_account.py](scripts/reset_demo_account.py) - Reset demo account balances
+  - [simple_reset.py](scripts/simple_reset.py) - Simple account reset
+  - [super_simple_reset.py](scripts/super_simple_reset.py) - Minimal reset script
+
+### 📁 Documentation
+- **[docs/](docs/)** - Comprehensive documentation:
+  - [MBO Data Guide](docs/MBO_DATA_GUIDE.md) - Market by Order data format
+  - [Streaming Data Dictionary](docs/STREAMING_DATA_DICTIONARY.md) - WebSocket data reference
+  - [Demo Account Reset](docs/DEMO_ACCOUNT_RESET.md) - Account management guide
+  - [Publishing Guide](docs/PUBLISHING_GUIDE.md) - Package publication instructions
 
 ## Architecture
 
 ```
 ironbeam/
-├── client.py           # REST API client
-├── models.py           # Pydantic models & enums
-├── streaming.py        # WebSocket streaming
-├── trade_manager.py    # Auto breakeven & Running TP
-├── execution_engine.py # ThreadedExecutor & AsyncExecutor
-└── exceptions.py       # Custom exceptions
+├── client.py           # REST API client with authentication
+├── models.py           # Pydantic v2 models with AliasChoices compatibility
+├── streaming.py        # WebSocket streaming with auto-reconnect
+├── trade_manager.py    # Auto breakeven & Running TP strategies
+├── execution_engine.py # ThreadedExecutor & AsyncExecutor engines
+└── exceptions.py       # Custom exceptions and error handling
 ```
+
+### Key Architecture Features
+
+**Dual Field Name Support**: 
+- `models.py` uses `AliasChoices` for maximum API compatibility
+- Handles IronBeam API's field name variations automatically
+- Maintains type safety and validation
+
+**Robust Error Handling**:
+- Custom exceptions for different error types
+- Graceful handling of API field format changes
+- Comprehensive validation with helpful error messages
+
+**Flexible Execution**:
+- ThreadedExecutor for simple polling-based execution
+- AsyncExecutor for high-performance WebSocket-driven execution
+- Both support auto-breakeven and running take-profit strategies
 
 ## Configuration Examples
 
@@ -361,10 +489,15 @@ RunningTPConfig(
 
 ## Requirements
 
-- Python 3.7+
-- requests
-- pydantic
-- websockets
+- **Python 3.7+**
+- **pydantic >= 2.0** (required for AliasChoices field compatibility)
+- **requests** (HTTP client for REST API)
+- **websockets** (WebSocket streaming support)
+
+### Compatibility Notes
+- Pydantic v2 is required for the dual field name support that makes the SDK robust against API field format changes
+- The SDK is tested with Python 3.7+ but works best with Python 3.8+
+- WebSocket features require a stable internet connection for optimal performance
 
 ## License
 
@@ -372,7 +505,19 @@ MIT License - see [LICENSE](LICENSE) for details
 
 ## Disclaimer
 
-This is an unofficial SDK. Use at your own risk. Always test thoroughly in a demo environment before using with live trading accounts.
+This is an unofficial but production-ready SDK for the IronBeam API. The SDK has been thoroughly tested and includes robust error handling and field compatibility features. However, always test thoroughly in a demo environment before using with live trading accounts.
+
+**Production Features**:
+- ✅ Comprehensive field name compatibility
+- ✅ Robust error handling and validation
+- ✅ Extensive testing with various API response formats
+- ✅ Auto-reconnect and state management for streaming
+- ✅ Thread-safe execution engines
+
+**Recommended Testing**:
+- Always test your strategies in demo accounts first
+- Validate bracket orders and risk management features
+- Test network connectivity and error handling scenarios
 
 ## Contributing
 

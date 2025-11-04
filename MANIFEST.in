@@ -1,9 +1,6 @@
-# Include documentation files
+# Include core documentation files
 include README.md
 include LICENSE
-include QUICK_START.md
-include MBO_DATA_GUIDE.md
-include CLEANUP_SUMMARY.md
 
 # Include package metadata
 include pyproject.toml
@@ -11,20 +8,30 @@ include pyproject.toml
 # Include type hints marker
 include ironbeam/py.typed
 
-# Exclude unnecessary files
+# Include documentation directory (optional for users)
+recursive-include docs *.md
+
+# Include examples directory (for user reference)
+recursive-include examples *.py
+recursive-include examples *.md
+
+# Exclude development and build files
 exclude .env
+exclude .env.template
 exclude .gitignore
+exclude config.ini.template
 exclude package.json
 exclude openapi.json
-exclude hft_bracket_breakeven.py
 
 # Exclude development directories
+recursive-exclude scripts *
 recursive-exclude tests *
-recursive-exclude examples *
 recursive-exclude __pycache__ *
 recursive-exclude *.egg-info *
 recursive-exclude .git *
 recursive-exclude .claude *
+recursive-exclude dist *
+recursive-exclude build *
 
 # Exclude compiled Python files
 global-exclude *.pyc

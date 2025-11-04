@@ -37,11 +37,14 @@ from .models import (
 )
 
 class IronBeam:
-    def __init__(self, api_key, username, password=None):
+    def __init__(self, api_key, username, password=None, mode="demo"):
         self.api_key = api_key
         self.username = username
         self.password = password
-        self.base_url = "https://demo.ironbeamapi.com/v2"
+        if mode == "demo":
+            self.base_url = "https://demo.ironbeamapi.com/v2"
+        if mode == "live":
+            self.base_url = "https://live.ironbeamapi.com/v2/"
         self.token = None
 
     def authenticate(self, request: Optional[AuthenticationRequest] = None) -> Token:
@@ -61,9 +64,10 @@ class IronBeam:
             # Use Pydantic v2 method
             payload = request.model_dump(by_alias=True, exclude_none=True)
         else:
+            # IMPORTANT: API expects lowercase "apikey" per OpenAPI spec!
             payload = {
                 "username": self.username,
-                "apiKey": self.api_key
+                "apikey": self.api_key  # lowercase per OpenAPI spec
             }
             if self.password:
                 payload["password"] = self.password
@@ -83,7 +87,14 @@ class IronBeam:
         """Get headers for authenticated requests."""
         if not self.token:
             raise Exception("Authentication token not available. Please authenticate first.")
-        return {"Authorization": f"Bearer {self.token}"}
+        headers = {
+            "Authorization": f"Bearer {self.token}",
+            "Content-Type": "application/json"
+        }
+        # Add API key for endpoints that require both Bearer token and API key
+        if self.api_key:
+            headers["x-api-key"] = self.api_key
+        return headers
 
     def get_trader_info(self) -> TraderInfo:
         """Get trader information.
@@ -169,78 +180,180 @@ class IronBeam:
         response.raise_for_status()
         return AccountFills(**response.json())
 
-    def get_quotes(self, symbols):
-        """Get quotes for a list of symbols."""
+    def get_quotes(self, symbols) -> QuotesResponse:
+        """Get quotes for a list of symbols.
+
+        Returns:
+            QuotesResponse with quote data
+        """
         headers = self._get_headers()
         params = {"symbols": ",".join(symbols)}
         response = requests.get(f"{self.base_url}/market/quotes", headers=headers, params=params)
         response.raise_for_status()
-        return response.json()
+        return QuotesResponse(**response.json())
 
-    def get_depth(self, symbols):
-        """Get market depth for a list of symbols."""
+    def get_depth(self, symbols) -> DepthResponse:
+        """Get market depth for a list of symbols.
+
+        Returns:
+            DepthResponse with market depth data
+        """
         headers = self._get_headers()
         params = {"symbols": ",".join(symbols)}
         response = requests.get(f"{self.base_url}/market/depth", headers=headers, params=params)
         response.raise_for_status()
-        return response.json()
+        return DepthResponse(**response.json())
 
-    def get_trades(self, symbol, from_time, to_time, max_records=100, earlier=True):
-        """Get historical trades for a symbol."""
+    def get_trades(self, symbol, from_time, to_time, max_records=100, earlier=True) -> TradesResponse:
+        """Get historical trades for a symbol.
+
+        Returns:
+            TradesResponse with trade history
+        """
         headers = self._get_headers()
         url = f"{self.base_url}/market/trades/{symbol}/{from_time}/{to_time}/{max_records}/{earlier}"
         response = requests.get(url, headers=headers)
         response.raise_for_status()
-        return response.json()
+        return TradesResponse(**response.json())
 
-    def place_order(self, account_id, order):
-        """Place a new order."""
+    def place_order(self, account_id, order) -> OrderResponse:
+        """Place a new order.
+
+        Returns:
+            OrderResponse with order ID and status
+        """
         headers = self._get_headers()
         # Convert Pydantic model to dict if necessary
         if hasattr(order, 'model_dump'):
             order = order.model_dump(by_alias=True, exclude_none=True)
         response = requests.post(f"{self.base_url}/order/{account_id}/place", headers=headers, json=order)
         response.raise_for_status()
-        return response.json()
+        return OrderResponse(**response.json())
 
-    def update_order(self, account_id, order_id, order_update):
-        """Update an existing order."""
+    def update_order(self, account_id, order_id, order_update) -> OrderResponse:
+        """Update an existing order.
+
+        Returns:
+            OrderResponse with updated order status
+        """
         headers = self._get_headers()
         # Convert Pydantic model to dict if necessary
         if hasattr(order_update, 'model_dump'):
             order_update = order_update.model_dump(by_alias=True, exclude_none=True)
         response = requests.put(f"{self.base_url}/order/{account_id}/update/{order_id}", headers=headers, json=order_update)
         response.raise_for_status()
-        return response.json()
+        return OrderResponse(**response.json())
 
-    def cancel_order(self, account_id, order_id):
-        """Cancel an order."""
+    def cancel_order(self, account_id, order_id) -> CancelOrderResponse:
+        """Cancel an order.
+
+        Returns:
+            CancelOrderResponse with cancellation status
+        """
         headers = self._get_headers()
         response = requests.delete(f"{self.base_url}/order/{account_id}/cancel/{order_id}", headers=headers)
         response.raise_for_status()
-        return response.json()
+        return CancelOrderResponse(**response.json())
 
-    def get_orders(self, account_id, order_status="ANY"):
-        """Get orders for an account."""
+    def get_orders(self, account_id, order_status="ANY") -> OrdersResponse:
+        """Get orders for an account.
+
+        Returns:
+            OrdersResponse with list of orders
+        """
         headers = self._get_headers()
         response = requests.get(f"{self.base_url}/order/{account_id}/{order_status}", headers=headers)
         response.raise_for_status()
-        return response.json()
+        return OrdersResponse(**response.json())
 
-    def get_order_fills(self, account_id):
-        """Get order fills for an account."""
+    def get_open_orders(self, account_id: str) -> OrdersResponse:
+        """Get all open orders for an account.
+        
+        This method retrieves orders that are currently active/working in the market.
+        Open orders include orders with the following statuses:
+        - NEW: Newly submitted orders
+        - WORKING: Orders working in the market  
+        - PARTIALLY_FILLED: Orders that have been partially executed
+        - PENDING_NEW: Orders pending acceptance
+        - SUBMITTED: Orders that have been submitted but not yet confirmed
+        
+        For a complete list of all orders regardless of status, use get_orders() method.
+        
+        Args:
+            account_id: Account ID to retrieve open orders for
+            
+        Returns:
+            OrdersResponse containing list of open orders
+            
+        Raises:
+            AuthenticationError: If not authenticated
+            InvalidRequestError: If request is invalid
+            HTTPError: For other HTTP errors
+            
+        Reference:
+            IronBeam API Documentation: GET /order/{accountId}/{orderStatus}
+            https://docs.ironbeamapi.com/ - Order Management section
+        """
+        # Get orders with "ANY" status first, then filter for open statuses
+        # This approach ensures we capture all potentially open orders
+        # as the API may have varying interpretations of "open" vs specific statuses
+        all_orders_response = self.get_orders(account_id, "ANY")
+        
+        # Define what constitutes "open" orders based on IronBeam API documentation
+        open_statuses = {
+            OrderStatus.NEW,
+            OrderStatus.WORKING, 
+            OrderStatus.PARTIALLY_FILLED,
+            OrderStatus.PENDING_NEW,
+            OrderStatus.SUBMITTED,
+            OrderStatus.PENDING_CANCEL,  # Orders pending cancellation are still technically open
+            OrderStatus.PENDING           # Generic pending status
+        }
+        
+        # Filter orders to only include open ones
+        if all_orders_response.orders:
+            open_orders = [
+                order for order in all_orders_response.orders 
+                if order.status in open_statuses
+            ]
+            
+            # Create a new response with only open orders
+            filtered_response = OrdersResponse(
+                orders=open_orders,
+                status=all_orders_response.status,
+                message=f"Found {len(open_orders)} open orders"
+            )
+            return filtered_response
+        else:
+            # Return empty response if no orders found
+            return OrdersResponse(
+                orders=[],
+                status=all_orders_response.status,
+                message="No open orders found"
+            )
+
+    def get_order_fills(self, account_id) -> OrdersFillsResponse:
+        """Get order fills for an account.
+
+        Returns:
+            OrdersFillsResponse with fill history
+        """
         headers = self._get_headers()
         response = requests.get(f"{self.base_url}/order/{account_id}/fills", headers=headers)
         response.raise_for_status()
-        return response.json()
+        return OrdersFillsResponse(**response.json())
 
-    def get_security_definitions(self, symbols):
-        """Get security definitions for a list of symbols."""
+    def get_security_definitions(self, symbols) -> SecurityDefinitionsResponse:
+        """Get security definitions for a list of symbols.
+
+        Returns:
+            SecurityDefinitionsResponse with security details
+        """
         headers = self._get_headers()
         params = {"symbols": ",".join(symbols)}
         response = requests.get(f"{self.base_url}/info/security/definitions", headers=headers, params=params)
         response.raise_for_status()
-        return response.json()
+        return SecurityDefinitionsResponse(**response.json())
 
     def get_symbols(self, text, limit=100, prefer_active=True):
         """Search for symbols."""
@@ -432,16 +545,28 @@ class IronBeam:
 
     # ==================== Simulated Account Management ====================
 
-    def simulated_account_reset(self, account_id, password):
+    def simulated_account_reset(self, account_id, template_id="XAP100"):
         """Reset a simulated account to initial state.
 
         Args:
             account_id: Account ID to reset
-            password: Account password
+            template_id: Template ID to use for reset (XAP50, XAP100, XAP150)
         """
         headers = self._get_headers()
-        payload = {"accountId": account_id, "password": password}
+        payload = {"AccountId": account_id, "TemplateId": template_id}
+        
+        # Debug the request
+        print(f"🔍 Debug - Headers: {headers}")
+        print(f"🔍 Debug - Payload: {payload}")
+        print(f"🔍 Debug - URL: {self.base_url}/simulatedAccountReset")
+        
         response = requests.put(f"{self.base_url}/simulatedAccountReset", headers=headers, json=payload)
+        
+        # Debug the response
+        print(f"🔍 Debug - Response status: {response.status_code}")
+        print(f"🔍 Debug - Response headers: {dict(response.headers)}")
+        print(f"🔍 Debug - Response body: {response.text}")
+        
         response.raise_for_status()
         return response.json()
 

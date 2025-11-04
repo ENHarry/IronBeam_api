@@ -8,7 +8,7 @@ version = "0.1.0"
 authors = [
   { name="Naina Tech", email="packages@nainatechcorp.com" },
 ]
-description = "Comprehensive Python SDK for IronBeam API with automated trade management features"
+description = "Production-ready Python SDK for IronBeam API with automated trade management, WebSocket streaming, and robust field compatibility"
 readme = "README.md"
 requires-python = ">=3.7"
 keywords = [
@@ -20,7 +20,14 @@ keywords = [
     "algorithmic-trading",
     "automated-trading",
     "finance",
-    "derivatives"
+    "derivatives",
+    "websocket",
+    "real-time",
+    "hft",
+    "bracket-orders",
+    "stop-loss",
+    "take-profit",
+    "pydantic"
 ]
 license = "MIT"
 classifiers = [
@@ -41,7 +48,7 @@ classifiers = [
 
 dependencies = [
     "requests>=2.28.0",
-    "pydantic>=1.10.0,<3.0.0",
+    "pydantic>=2.0.0,<3.0.0",
     "websockets>=10.0"
 ]
 

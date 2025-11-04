@@ -26,7 +26,7 @@ class IronBeamStream:
     - Connection state management
     """
 
-    def __init__(self, client, base_url="wss://demo.ironbeamapi.com/v2"):
+    def __init__(self, client, mode="demo", base_url: Optional[str] = None):
         """Initialize the streaming client.
 
         Args:
@@ -34,6 +34,12 @@ class IronBeamStream:
             base_url: WebSocket base URL
         """
         self.client = client
+
+        if base_url is None:
+            if mode == "demo":
+                base_url = "wss://demo.ironbeamapi.com/v2"
+            if mode == "live":
+                base_url = "wss://live.ironbeamapi.com/v2"
         self.base_url = base_url
         self.stream_id = None
         self.websocket = None

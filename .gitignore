@@ -59,6 +59,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+.env.*
 
 # Spyder project settings
 .spyderproject
@@ -93,6 +94,9 @@ cython_debug/
 
 # OpenAPI
 openapi.json
+python-client/*
+python-client
+
 
 # Claude
 .claude/*

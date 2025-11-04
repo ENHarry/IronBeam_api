@@ -120,7 +120,11 @@ from .models import (
     SecurityStatus,
     DepthLevel
 )
-from .exceptions import APIError, AuthenticationError, InvalidRequestError
+from .exceptions import (
+    APIError, AuthenticationError, InvalidRequestError,
+    RateLimitError, ServerError, ConnectionError, TimeoutError,
+    StreamingError, OrderError, PositionError
+)
 
 __version__ = "0.1.0"
 
@@ -247,4 +251,11 @@ __all__ = [
     "APIError",
     "AuthenticationError",
     "InvalidRequestError",
+    "RateLimitError",
+    "ServerError",
+    "ConnectionError", 
+    "TimeoutError",
+    "StreamingError",
+    "OrderError",
+    "PositionError",
 ]

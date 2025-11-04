@@ -9,7 +9,9 @@
       "Bash(timeout 60 python:*)",
       "Bash(..fin_venvScriptspython.exe hft_bracket_breakeven.py)",
       "Bash(../fin_venv/Scripts/python.exe:*)",
-      "Bash(timeout 60 ../fin_venv/Scripts/python.exe:*)"
+      "Bash(timeout 60 ../fin_venv/Scripts/python.exe:*)",
+      "Bash(../fin_venv/Scripts/pip.exe install:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

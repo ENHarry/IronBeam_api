@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, AliasChoices
 from typing import List, Optional, Union, Literal
 from enum import Enum
 import re
@@ -6,22 +6,31 @@ import re
 # ==================== Enums ====================
 
 class OrderSide(str, Enum):
+    """Order side enumeration."""
     BUY = "BUY"
     SELL = "SELL"
+    INVALID = "INVALID"
 
 class OrderType(str, Enum):
+    """Order type enumeration.
+
+    Note: API returns text strings in responses but MAY accept both formats in requests.
+    """
     MARKET = "MARKET"
     LIMIT = "LIMIT"
     STOP = "STOP"
     STOP_LIMIT = "STOP_LIMIT"
 
 class DurationType(str, Enum):
+    """Duration type enumeration.
+
+    Note: API returns text strings in responses.
+    """
     DAY = "DAY"
     GOOD_TILL_CANCEL = "GOOD_TILL_CANCEL"
-    IMMEDIATE_OR_CANCEL = "IMMEDIATE_OR_CANCEL"
-    FILL_OR_KILL = "FILL_OR_KILL"
 
 class OrderStatus(str, Enum):
+    """Order status enumeration - complete list per OpenAPI spec."""
     PENDING = "PENDING"
     WORKING = "WORKING"
     FILLED = "FILLED"
@@ -29,15 +38,34 @@ class OrderStatus(str, Enum):
     REJECTED = "REJECTED"
     EXPIRED = "EXPIRED"
     ANY = "ANY"
+    # Additional statuses from OpenAPI spec
+    SUBMITTED = "SUBMITTED"
+    NEW = "NEW"
+    PARTIALLY_FILLED = "PARTIALLY_FILLED"
+    DONE_FOR_DAY = "DONE_FOR_DAY"
+    REPLACED = "REPLACED"
+    PENDING_CANCEL = "PENDING_CANCEL"
+    STOPPED = "STOPPED"
+    SUSPENDED = "SUSPENDED"
+    PENDING_NEW = "PENDING_NEW"
+    CALCULATED = "CALCULATED"
+    ACCEPTED_FOR_BIDDING = "ACCEPTED_FOR_BIDDING"
+    PENDING_REPLACE = "PENDING_REPLACE"
+    CANCEL_REJECTED = "CANCEL_REJECTED"
+    ORDER_NOT_FOUND = "ORDER_NOT_FOUND"
+    QUEUED_NEW = "QUEUED_NEW"
+    QUEUED_CANCEL = "QUEUED_CANCEL"
+    COMPLETE = "COMPLETE"
+    INVALID = "INVALID"
 
 class PositionSide(str, Enum):
     LONG = "LONG"
     SHORT = "SHORT"
 
 class BalanceType(str, Enum):
+    """Balance type enumeration - per OpenAPI spec."""
     CURRENT_OPEN = "CURRENT_OPEN"
-    CURRENT_CLOSE = "CURRENT_CLOSE"
-    PREVIOUS_CLOSE = "PREVIOUS_CLOSE"
+    START_OF_DAY = "START_OF_DAY"
 
 # ==================== Authentication Models ====================
 
@@ -69,11 +97,30 @@ class UserInfo(BaseModel):
     class Config:
         populate_by_name = True
 
+class MarginInfo(BaseModel):
+    """Margin information nested in Balance."""
+    margin_requirement: Optional[float] = Field(None, alias='marginRequirement')
+    buying_power: Optional[float] = Field(None, alias='buyingPower')
+
+    class Config:
+        populate_by_name = True
+
 class Balance(BaseModel):
+    """Balance model - per OpenAPI spec with all fields."""
+    account_id: Optional[str] = Field(None, alias='accountId')
     currency_code: str = Field(..., alias='currencyCode')
     cash_balance: float = Field(..., alias='cashBalance')
+    cash_balance_available: Optional[float] = Field(None, alias='cashBalanceAvailable')
     open_trade_equity: float = Field(..., alias='openTradeEquity')
+    total_equity: Optional[float] = Field(None, alias='totalEquity')
     unrealized_pl: Optional[float] = Field(None, alias='unrealizedPL')
+    net_liquidity: Optional[float] = Field(None, alias='netLiquidity')
+    net_liquidity_available: Optional[float] = Field(None, alias='netLiquidityAvailable')
+    cash_added_today: Optional[float] = Field(None, alias='cashAddedToday')
+    days_on_call: Optional[int] = Field(None, alias='daysOnCall')
+    balance_type: Optional[BalanceType] = Field(None, alias='balanceType')
+    margin_info: Optional[MarginInfo] = Field(None, alias='marginInfo')
+    # Legacy fields for backward compatibility
     margin_balance: Optional[float] = Field(None, alias='marginBalance')
     available_for_trading: Optional[float] = Field(None, alias='availableForTrading')
 
@@ -90,15 +137,15 @@ class AccountBalance(BaseModel):
         populate_by_name = True
 
 class Position(BaseModel):
-    account_id: str = Field(..., alias='accountId')
-    exch_sym: str = Field(..., alias='exchSym')
-    position_id: Optional[str] = Field(None, alias='positionId')
-    quantity: float
+    account_id: str = Field(..., validation_alias=AliasChoices('accountId', 'account_id'))
+    exch_sym: str = Field(..., validation_alias=AliasChoices('exchSym', 'exch_sym'))
+    position_id: Optional[str] = Field(None, validation_alias=AliasChoices('positionId', 'position_id'))
+    quantity: int
     price: float
     side: PositionSide
-    unrealized_pl: Optional[float] = Field(None, alias='unrealizedPL')
-    date_opened: Optional[str] = Field(None, alias='dateOpened')
-    currency_code: Optional[str] = Field(None, alias='currencyCode')
+    unrealized_pl: Optional[float] = Field(None, validation_alias=AliasChoices('unrealizedPL', 'unrealized_pl'))
+    date_opened: Optional[str] = Field(None, validation_alias=AliasChoices('dateOpened', 'date_opened'))
+    currency_code: Optional[str] = Field(None, validation_alias=AliasChoices('currencyCode', 'currency_code'))
 
     @field_validator('exch_sym')
     def validate_symbol(cls, v):
@@ -138,13 +185,24 @@ class AccountRisk(BaseModel):
             object.__setattr__(self, 'risk', self.risks[0])
 
 class Fill(BaseModel):
-    fill_id: Optional[str] = Field(None, alias='fillId')
-    order_id: str = Field(..., alias='orderId')
-    exch_sym: str = Field(..., alias='exchSym')
+    """Order fill model - matches actual API responses."""
+    fill_id: Optional[str] = Field(None, validation_alias=AliasChoices('fillId', 'fill_id'))
+    order_id: str = Field(..., validation_alias=AliasChoices('orderId', 'order_id'))
+    strategy_id: Optional[Union[str, int]] = Field(None, validation_alias=AliasChoices('strategyId', 'strategy_id'))  # API returns int!
+    account_id: Optional[str] = Field(None, validation_alias=AliasChoices('accountId', 'account_id'))
+    exch_sym: str = Field(..., validation_alias=AliasChoices('exchSym', 'exch_sym'))
     side: OrderSide
-    quantity: float
+    status: Optional[OrderStatus] = None
+    quantity: int
+    fill_quantity: Optional[float] = Field(None, validation_alias=AliasChoices('fillQuantity', 'fill_quantity'))
+    fill_total_quantity: Optional[float] = Field(None, validation_alias=AliasChoices('fillTotalQuantity', 'fill_total_quantity'))
     price: Optional[float] = None
-    fill_time: Optional[str] = Field(None, alias='fillTime')
+    fill_price: Optional[float] = Field(None, validation_alias=AliasChoices('fillPrice', 'fill_price'))
+    avg_fill_price: Optional[float] = Field(None, validation_alias=AliasChoices('avgFillPrice', 'avg_fill_price'))
+    fill_time: Optional[str] = Field(None, validation_alias=AliasChoices('fillTime', 'fill_time'))
+    fill_date: Optional[str] = Field(None, validation_alias=AliasChoices('fillDate', 'fill_date'))
+    time_order_event: Optional[Union[str, int]] = Field(None, validation_alias=AliasChoices('timeOrderEvent', 'time_order_event'))  # API returns int!
+    order_update_id: Optional[Union[str, int]] = Field(None, validation_alias=AliasChoices('orderUpdateId', 'order_update_id'))  # API returns int!
 
     class Config:
         populate_by_name = True
@@ -157,6 +215,7 @@ class AccountFills(BaseModel):
 # ==================== Order Models ====================
 
 class OrderRequest(BaseModel):
+    """Order placement request - per OpenAPI spec."""
     account_id: str = Field(..., alias='accountId')
     exch_sym: str = Field(..., alias='exchSym')
     side: OrderSide
@@ -189,12 +248,13 @@ class OrderRequest(BaseModel):
         use_enum_values = True
 
 class OrderUpdateRequest(BaseModel):
+    """Order update request - per OpenAPI spec."""
     order_id: str = Field(..., alias='orderId')
-    quantity: Optional[int] = None
+    quantity: Optional[float] = None  # Optional per actual OpenAPI spec, changed to float
     limit_price: Optional[float] = Field(None, alias='limitPrice')
-    stop_price: Optional[float] = Field(None, alias='stopPrice')
-    stop_loss: Optional[float] = Field(None, alias='stopLoss')
-    take_profit: Optional[float] = Field(None, alias='takeProfit')
+    stop_price: Optional[float] = Field(None, alias='stopPrice')  # For STOP/STOP_LIMIT order updates
+    stop_loss: Optional[float] = Field(None, alias='stopLoss')  # For bracket SL updates
+    take_profit: Optional[float] = Field(None, alias='takeProfit')  # For bracket TP updates
     stop_loss_offset: Optional[float] = Field(None, alias='stopLossOffset')
     take_profit_offset: Optional[float] = Field(None, alias='takeProfitOffset')
     trailing_stop: Optional[float] = Field(None, alias='trailingStop')
@@ -202,19 +262,36 @@ class OrderUpdateRequest(BaseModel):
     class Config:
         populate_by_name = True
 
+class OrderError(BaseModel):
+    """Order error information."""
+    error_code: Optional[str] = Field(None, alias='errorCode')
+    error_text: Optional[str] = Field(None, alias='errorText')
+
+    class Config:
+        populate_by_name = True
+
 class Order(BaseModel):
-    order_id: str = Field(..., alias='orderId')
-    account_id: str = Field(..., alias='accountId')
-    exch_sym: str = Field(..., alias='exchSym')
+    """Order model - matches actual API responses."""
+    order_id: str = Field(..., validation_alias=AliasChoices('orderId', 'order_id'))
+    account_id: str = Field(..., validation_alias=AliasChoices('accountId', 'account_id'))
+    exch_sym: str = Field(..., validation_alias=AliasChoices('exchSym', 'exch_sym'))
     side: OrderSide
-    quantity: int
-    filled_quantity: Optional[int] = Field(None, alias='filledQuantity')
-    order_type: OrderType = Field(..., alias='orderType')
+    quantity: float  # Changed from int to float
+    order_type: OrderType = Field(..., validation_alias=AliasChoices('orderType', 'order_type'))
     status: OrderStatus
-    limit_price: Optional[float] = Field(None, alias='limitPrice')
-    stop_price: Optional[float] = Field(None, alias='stopPrice')
-    average_fill_price: Optional[float] = Field(None, alias='averageFillPrice')
-    time_submitted: Optional[str] = Field(None, alias='timeSubmitted')
+    duration: DurationType
+    strategy_id: Optional[Union[str, int]] = Field(None, validation_alias=AliasChoices('strategyId', 'strategy_id'))  # API returns int!
+    parent_order_id: Optional[Union[str, int]] = Field(None, validation_alias=AliasChoices('parentOrderId', 'parent_order_id'))
+    child_orders: Optional[List[Union[str, int]]] = Field(None, validation_alias=AliasChoices('childOrders', 'child_orders'))
+    limit_price: Optional[float] = Field(None, validation_alias=AliasChoices('limitPrice', 'limit_price'))
+    stop_price: Optional[float] = Field(None, validation_alias=AliasChoices('stopPrice', 'stop_price'))
+    filled_quantity: Optional[float] = Field(None, validation_alias=AliasChoices('filledQuantity', 'filled_quantity'))  # Changed to float
+    fill_quantity: Optional[float] = Field(None, validation_alias=AliasChoices('fillQuantity', 'fill_quantity'))  # Alternative name per OpenAPI
+    average_fill_price: Optional[float] = Field(None, validation_alias=AliasChoices('averageFillPrice', 'average_fill_price'))
+    fill_price: Optional[float] = Field(None, validation_alias=AliasChoices('fillPrice', 'fill_price'))  # Alternative name per OpenAPI
+    fill_date: Optional[str] = Field(None, validation_alias=AliasChoices('fillDate', 'fill_date'))
+    time_submitted: Optional[str] = Field(None, validation_alias=AliasChoices('timeSubmitted', 'time_submitted'))
+    order_error: Optional[OrderError] = Field(None, validation_alias=AliasChoices('orderError', 'order_error'))
 
     class Config:
         populate_by_name = True
@@ -222,8 +299,8 @@ class Order(BaseModel):
 class OrderResponse(BaseModel):
     status: str
     message: str
-    order_id: Optional[str] = Field(None, alias='orderId')
-    strategy_id: Optional[str] = Field(None, alias='strategyId')
+    order_id: Optional[str] = Field(None, validation_alias=AliasChoices('orderId', 'order_id'))
+    strategy_id: Optional[Union[str, int]] = Field(None, validation_alias=AliasChoices('strategyId', 'strategy_id'))  # API returns int!
 
     class Config:
         populate_by_name = True
@@ -247,40 +324,73 @@ class CancelMultipleRequest(BaseModel):
 # ==================== Market Data Models ====================
 
 class Quote(BaseModel):
-    exch_sym: str = Field(..., alias='exchSym')
-    bid_price: Optional[float] = Field(None, alias='bidPrice')
-    ask_price: Optional[float] = Field(None, alias='askPrice')
-    bid_size: Optional[int] = Field(None, alias='bidSize')
-    ask_size: Optional[int] = Field(None, alias='askSize')
-    last_price: Optional[float] = Field(None, alias='lastPrice')
-    last_size: Optional[int] = Field(None, alias='lastSize')
-    timestamp: Optional[str] = None
+    exch_sym: str = Field(..., validation_alias=AliasChoices('exchSym', 's'))
+    bid_price: Optional[float] = Field(None, validation_alias=AliasChoices('bidPrice', 'b'))
+    ask_price: Optional[float] = Field(None, validation_alias=AliasChoices('askPrice', 'a'))
+    bid_size: Optional[int] = Field(None, validation_alias=AliasChoices('bidSize', 'bs'))
+    ask_size: Optional[int] = Field(None, validation_alias=AliasChoices('askSize', 'as'))
+    last_price: Optional[float] = Field(None, validation_alias=AliasChoices('lastPrice', 'l'))
+    last_size: Optional[int] = Field(None, validation_alias=AliasChoices('lastSize', 'ls'))
+    timestamp: Optional[str] = Field(None, validation_alias=AliasChoices('timestamp', 't'))
 
     class Config:
         populate_by_name = True
 
 class QuotesResponse(BaseModel):
-    status: str
-    message: str
-    quotes: List[Quote]
-
-class DepthLevel(BaseModel):
-    price: float
-    size: int
-
-class Depth(BaseModel):
-    exch_sym: str = Field(..., alias='exchSym')
-    bids: List[DepthLevel]
-    asks: List[DepthLevel]
-    timestamp: Optional[str] = None
+    status: Optional[str] = None
+    message: Optional[str] = None
+    quotes: List[Quote] = Field(default_factory=list)
 
     class Config:
         populate_by_name = True
 
+class DepthLevel(BaseModel):
+    """Market depth level per OpenAPI spec.
+
+    Used in REST API depth responses. May contain abbreviated or full field names
+    depending on the API response format.
+    """
+    # Core fields (using abbreviated aliases per OpenAPI spec)
+    level: Optional[int] = Field(None, alias='l')  # 0-based level number
+    timestamp: Optional[int] = Field(None, alias='t')  # Time in milliseconds
+    side: Optional[str] = Field(None, alias='s')  # B (bid) or A (ask)
+    price: float = Field(..., alias='p')  # Price at this level
+    order_count: Optional[int] = Field(None, alias='o')  # Number of orders
+    size: float = Field(..., alias='sz')  # Total size at this level
+    implied_order_count: Optional[int] = Field(None, alias='ioc')  # Implied orders
+    implied_size: Optional[float] = Field(None, alias='is')  # Implied size
+
+    class Config:
+        populate_by_name = True
+
+class Depth(BaseModel):
+    """Market depth data per OpenAPI spec.
+
+    Depth data uses abbreviated field names per spec:
+    - 's' for symbol
+    - 'b' for bids array
+    - 'a' for asks array
+    """
+    exch_sym: str = Field(..., alias='s')  # Symbol (abbreviated per OpenAPI spec)
+    bids: List[DepthLevel] = Field(..., alias='b')  # Bid levels
+    asks: List[DepthLevel] = Field(..., alias='a')  # Ask levels
+    timestamp: Optional[str] = None
+
+    class Config:
+        populate_by_name = True  # Also accept 'exchSym', 'bids', 'asks' for compatibility
+
 class DepthResponse(BaseModel):
+    """Depth response from REST API.
+
+    Note: OpenAPI spec shows 'Depths' (capital D) but actual API may use 'depths'.
+    Using populate_by_name to accept both formats.
+    """
     status: str
     message: str
-    depths: List[Depth]
+    depths: List[Depth] = Field(..., alias='Depths')
+
+    class Config:
+        populate_by_name = True  # Accept both 'depths' and 'Depths'
 
 class Trade(BaseModel):
     price: float
@@ -349,25 +459,27 @@ class ComplexesResponse(BaseModel):
 # ==================== Simulated Account Models ====================
 
 class SimulatedTraderRequest(BaseModel):
-    first_name: str = Field(..., alias='firstName')
-    last_name: str = Field(..., alias='lastName')
-    email: str
-    password: str
-    template_id: str = Field(..., alias='templateId')
-    address1: str
-    city: str
-    state: str
-    country: str
-    zip_code: str = Field(..., alias='zipCode')
-    phone: str
+    """Simulated trader creation request - uses PascalCase per OpenAPI spec."""
+    first_name: str = Field(..., alias='FirstName')  # PascalCase per OpenAPI!
+    last_name: str = Field(..., alias='LastName')
+    email: str = Field(..., alias='Email')
+    password: str = Field(..., alias='Password')
+    template_id: str = Field(..., alias='TemplateId')
+    address1: str = Field(..., alias='Address1')
+    city: str = Field(..., alias='City')
+    state: str = Field(..., alias='State')
+    country: str = Field(..., alias='Country')
+    zip_code: str = Field(..., alias='ZipCode')
+    phone: str = Field(..., alias='Phone')
 
     class Config:
         populate_by_name = True
 
 class SimulatedAccountRequest(BaseModel):
-    trader_id: str = Field(..., alias='traderId')
-    password: str
-    template_id: str = Field(..., alias='templateId')
+    """Simulated account creation request - uses PascalCase per OpenAPI spec."""
+    trader_id: str = Field(..., alias='TraderId')  # PascalCase per OpenAPI!
+    password: str = Field(..., alias='Password')
+    template_id: str = Field(..., alias='TemplateId')
 
     class Config:
         populate_by_name = True
@@ -437,7 +549,7 @@ class SecurityStatusResponse(BaseModel):
 class StrategyIdResponse(BaseModel):
     status: str
     message: str
-    strategy_id: Optional[str] = Field(None, alias='strategyId')
+    strategy_id: Optional[Union[str, int]] = Field(None, alias='strategyId')  # API returns int!
 
     class Config:
         populate_by_name = True
@@ -454,7 +566,7 @@ class OrderIdResponse(BaseModel):
 class StrategyIdMappingResponse(BaseModel):
     status: str
     message: str
-    strategy_id: Optional[str] = Field(None, alias='strategyId')
+    strategy_id: Optional[Union[str, int]] = Field(None, alias='strategyId')  # API returns int!
     mapping: Optional[dict] = None
 
     class Config:
@@ -502,24 +614,40 @@ class QuoteStreamMessage(BaseModel):
         populate_by_name = True
 
 class OrderBookLevel(BaseModel):
-    """Individual order book level - supports both MBP and MBO."""
-    price: float = Field(..., alias='p')
-    size: int = Field(..., alias='s')
-    # MBO-specific fields (optional)
+    """Individual order book level per OpenAPI spec.
+
+    Represents a single level in the market depth (order book).
+    """
+    level: Optional[int] = Field(None, alias='l')  # 0-based level number
+    timestamp: Optional[int] = Field(None, alias='t')  # Time in milliseconds
+    side: Optional[str] = Field(None, alias='s')  # B (bid) or A (ask)
+    price: float = Field(..., alias='p')  # Price at this level
+    order_count: Optional[int] = Field(None, alias='o')  # Number of orders
+    size: float = Field(..., alias='sz')  # Total size at this level (changed to float per spec)
+    implied_order_count: Optional[int] = Field(None, alias='ioc')  # Implied orders
+    implied_size: Optional[float] = Field(None, alias='is')  # Implied size
+
+    # MBO-specific fields (optional, may not be in standard depth)
     order_id: Optional[str] = Field(None, alias='orderId')
     position: Optional[int] = None
-    timestamp: Optional[int] = Field(None, alias='t')
 
     class Config:
         populate_by_name = True
 
 class DepthStreamMessage(BaseModel):
-    """Enhanced depth/order book message from WebSocket stream."""
+    """Depth/order book message from WebSocket stream per OpenAPI spec.
+
+    Depth messages use abbreviated field names in the stream:
+    - 's' for symbol (exchSym)
+    - 'b' for bids array
+    - 'a' for asks array
+    - 't' for timestamp
+    """
     exch_sym: str = Field(..., alias='s')
-    bids: List[Union[OrderBookLevel, dict]] = []
-    asks: List[Union[OrderBookLevel, dict]] = []
+    bids: List[Union[OrderBookLevel, dict]] = Field(default_factory=list, alias='b')
+    asks: List[Union[OrderBookLevel, dict]] = Field(default_factory=list, alias='a')
     timestamp: Optional[int] = Field(None, alias='t')
-    sequence: Optional[int] = Field(None, alias='seq')
+    sequence: Optional[int] = Field(None, alias='seq')  # May not be in spec but useful
 
     class Config:
         populate_by_name = True
@@ -588,9 +716,9 @@ class CashReportResponse(BaseModel):
 # ==================== Request Models for Consistency ====================
 
 class AuthenticationRequest(BaseModel):
-    """Authentication request payload."""
+    """Authentication request payload - per OpenAPI spec."""
     username: str
-    api_key: str = Field(..., alias='apiKey')
+    api_key: str = Field(..., alias='apikey')  # lowercase per OpenAPI spec!
     password: Optional[str] = None
 
     class Config:
