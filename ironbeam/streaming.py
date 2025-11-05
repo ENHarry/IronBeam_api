@@ -111,6 +111,9 @@ class IronBeamStream:
                     if self.reconnect_attempt > 0:
                         await self._resubscribe()
 
+                if self.websocket is None:
+                    continue
+
                 async for message in self.websocket:
                     try:
                         data = json.loads(message)

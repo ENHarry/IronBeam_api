@@ -9,7 +9,7 @@ from .models import (
     AccountPositions, AccountRisk, AccountFills,
     # Orders
     OrderRequest, OrderUpdateRequest, OrderResponse, OrdersRequest, OrdersResponse,
-    CancelOrderResponse, CancelMultipleRequest, CancelMultipleResponse,
+    CancelOrderResponse, CancelMultipleRequest, CancelMultipleResponse, OrderStatusResponse,
     OrdersFillsResponse,
     # Market Data
     QuotesRequest, QuotesResponse, DepthRequest, DepthResponse,
@@ -37,6 +37,21 @@ from .models import (
 )
 
 class IronBeam:
+    """
+    IronBeam API Client - Complete trading interface with 49+ endpoints
+    
+    Key Methods:
+    • authenticate() - Get auth token
+    • get_quotes(symbols) - Real-time market data  
+    • place_order(account_id, order) - Submit orders
+    • get_positions(account_id) - View positions
+    • get_account_balance(account_id) - Account info
+    
+    Example:
+        client = IronBeam(api_key="key", username="user", password="pass")
+        client.authenticate()
+        quotes = client.get_quotes(["XCME:ES.Z24"])
+    """
     def __init__(self, api_key, username, password=None, mode="demo"):
         self.api_key = api_key
         self.username = username
@@ -234,7 +249,7 @@ class IronBeam:
         """Update an existing order.
 
         Returns:
-            OrderResponse with updated order status
+            OrderResponse with updated order status 
         """
         headers = self._get_headers()
         # Convert Pydantic model to dict if necessary
@@ -331,6 +346,31 @@ class IronBeam:
                 status=all_orders_response.status,
                 message="No open orders found"
             )
+
+    def get_order_status(self, account_id: str, order_status: str, order_id: str) -> OrderStatusResponse:
+        """Get the status of a specific order.
+
+        Args:
+            account_id: Account ID
+            order_status: Order status
+            order_id: Order ID
+
+        Returns:
+            OrderStatusResponse with the status of the order
+        """
+        headers = self._get_headers()
+        response = requests.get(f"{self.base_url}/order/{account_id}/{order_status}", headers=headers)
+        response.raise_for_status()
+        # extract orders list from response
+        order_status_data = response.json()['orders']
+        # Assuming order_id is unique and present in the orders list
+        order_info = next((order for order in order_status_data if order['orderId'] == order_id), None)
+
+        if order_info is None:
+            raise Exception(f"Order ID {order_id} not found in the response.")
+
+        return OrderStatusResponse(**order_info)
+    
 
     def get_order_fills(self, account_id) -> OrdersFillsResponse:
         """Get order fills for an account.
@@ -951,3 +991,26 @@ class IronBeam:
                 'keyword': keyword,
                 'error': str(e)
             }
+
+    def get_contract_details(self, symbol, limit=5, prefer_active=True):
+        url = self.base_url + f"/info/symbols"
+        params = {'symbols': symbol, 'limit': limit, 'preferActive': prefer_active}
+        margin_requirements = self.get_security_margin(symbol)['initialMarginLong']
+
+        # Fetch contract details from the symbols info endpoint
+        response = requests.get(url, params=params)
+        if response.status_code != 200:
+            raise Exception(f"Failed to get contract details for {symbol}: {response.text}")
+
+        symbols_info = response.json().get('symbols', [])
+        contract_info = next((item for item in symbols_info if item['symbol'] == symbol), None)
+
+        if not contract_info:
+            raise Exception(f"Symbol {symbol} not found in contract details")
+
+        # Combine contract info with margin requirements
+        contract_info['margin_requirements'] = margin_requirements
+
+        return contract_info
+
+   

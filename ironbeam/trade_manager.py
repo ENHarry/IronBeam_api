@@ -7,12 +7,45 @@ Provides automated trade and risk management functions:
 """
 
 import logging
-from typing import Optional, List, Literal, Dict, Any
+import time
+import functools
+from typing import Optional, List, Literal, Dict, Any, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from .models import OrderSide, Position
 
 logger = logging.getLogger(__name__)
+
+def retry_api_call(max_retries: int = 3, delay: float = 1.0, backoff: float = 2.0):
+    """Decorator for retrying API calls with exponential backoff.
+    
+    Args:
+        max_retries: Maximum number of retry attempts
+        delay: Initial delay between retries in seconds  
+        backoff: Backoff multiplier for delay
+    """
+    def decorator(func: Callable) -> Callable:
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            current_delay = delay
+            
+            for attempt in range(max_retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    if attempt == max_retries:
+                        logger.error(f"API call {func.__name__} failed after {max_retries} retries: {e}")
+                        raise e
+                    
+                    logger.warning(f"API call {func.__name__} failed (attempt {attempt + 1}/{max_retries + 1}): {e}")
+                    logger.info(f"Retrying in {current_delay:.1f} seconds...")
+                    time.sleep(current_delay)
+                    current_delay *= backoff
+            
+            # This should never be reached, but just in case
+            return False
+        return wrapper
+    return decorator
 
 
 # ==================== Configuration Models ====================
@@ -157,6 +190,38 @@ class AutoBreakevenManager:
         self.client = client
         self.account_id = account_id
         self.managed_positions: Dict[str, tuple[PositionState, AutoBreakevenConfig]] = {}
+        
+        # Throttling to prevent excessive API calls
+        self.last_update_times = {}  # Track last API call timestamp per order
+        self.last_sl_values = {}     # Track last SL value to prevent duplicates
+        self.min_update_interval_seconds = 10.0  # Minimum time between updates
+
+    def _validate_position(self, order_id: str, current_price: float) -> tuple[bool, str]:
+        """Validate position state and market conditions.
+        
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        if order_id not in self.managed_positions:
+            return False, f"Position {order_id} not found in managed positions"
+        
+        position, config = self.managed_positions[order_id]
+        
+        if not config.enabled:
+            return False, f"Auto breakeven disabled for {order_id}"
+        
+        if current_price <= 0:
+            return False, f"Invalid current price: {current_price}"
+        
+        if position.entry_price <= 0:
+            return False, f"Invalid entry price: {position.entry_price}"
+        
+        # Check for reasonable price range (not more than 50% deviation)
+        price_deviation = abs(current_price - position.entry_price) / position.entry_price
+        if price_deviation > 0.5:
+            return False, f"Current price {current_price} too far from entry {position.entry_price} (deviation: {price_deviation:.1%})"
+        
+        return True, ""
 
     def start_monitoring(self, order_id: str, position: PositionState, config: AutoBreakevenConfig):
         """Start monitoring a position for auto breakeven.
@@ -171,6 +236,13 @@ class AutoBreakevenManager:
             return
 
         self.managed_positions[order_id] = (position, config)
+        
+        # Initialize throttling tracking for this position
+        if order_id not in self.last_update_times:
+            self.last_update_times[order_id] = 0.0
+        if order_id not in self.last_sl_values:
+            self.last_sl_values[order_id] = position.current_stop_loss or 0.0
+            
         logger.info(f"Started auto breakeven monitoring for {order_id}")
 
     def stop_monitoring(self, order_id: str):
@@ -181,6 +253,11 @@ class AutoBreakevenManager:
         """
         if order_id in self.managed_positions:
             del self.managed_positions[order_id]
+            
+            # Clean up throttling tracking
+            self.last_update_times.pop(order_id, None)
+            self.last_sl_values.pop(order_id, None)
+            
             logger.info(f"Stopped auto breakeven monitoring for {order_id}")
 
     def check_and_update(self, order_id: str, current_price: float) -> bool:
@@ -193,7 +270,10 @@ class AutoBreakevenManager:
         Returns:
             True if stop loss was updated, False otherwise
         """
-        if order_id not in self.managed_positions:
+        # Validate position state and market conditions
+        is_valid, error_msg = self._validate_position(order_id, current_price)
+        if not is_valid:
+            logger.debug(f"Position validation failed for {order_id}: {error_msg}")
             return False
 
         position, config = self.managed_positions[order_id]
@@ -230,36 +310,109 @@ class AutoBreakevenManager:
             else:
                 new_stop_loss = position.entry_price - sl_offset
 
-            # Update stop loss via API
-            try:
-                update_request = {
-                    "orderId": order_id,
-                    "quantity": position.quantity,
-                    "stopLoss": new_stop_loss
-                }
-
-                response = self.client.update_order(
-                    self.account_id,
-                    order_id,
-                    update_request
-                )
-
-                # Update state
-                position.current_stop_loss = new_stop_loss
-                position.breakeven_moves_completed += 1
-
-                logger.info(
-                    f"Auto breakeven move {move_index + 1} executed for {order_id}: "
-                    f"SL moved to {new_stop_loss} (trigger: {trigger_level}, offset: {sl_offset})"
-                )
-
-                return True
-
-            except Exception as e:
-                logger.error(f"Failed to update stop loss for {order_id}: {e}")
-                return False
+            # Update stop loss via API with throttling
+            return self._update_stop_loss_with_throttling(
+                order_id, position, new_stop_loss, move_index, trigger_level, sl_offset
+            )
 
         return False
+
+    def add_position(self, symbol: str, order_id: str, quantity: int, entry_price: float, side: OrderSide,):
+        """Add a position to be managed for auto breakeven.
+
+        Args:
+            symbol: Trading symbol
+            order_id: Order ID to manage
+            quantity: Position quantity
+            entry_price: Entry price of the position
+            side: Order side (buy/sell)
+        """
+        position = PositionState(
+            order_id=order_id,
+            account_id=self.account_id,
+            symbol=symbol,
+            side=side,
+            entry_price=entry_price,
+            quantity=quantity
+        )
+
+        config = AutoBreakevenConfig()
+        self.managed_positions[order_id] = (position, config)
+        logger.info(f"Added position {order_id} for auto breakeven monitoring")
+
+    def _update_stop_loss_with_throttling(self, order_id: str, position: PositionState, 
+                                        new_stop_loss: float, move_index: int, 
+                                        trigger_level: float, sl_offset: float) -> bool:
+        """Update stop loss with throttling to prevent excessive API calls."""
+        import time
+        
+        current_time = time.time()
+        
+        # Check if enough time has passed since last update
+        if order_id in self.last_update_times:
+            time_since_last = current_time - self.last_update_times[order_id]
+            if time_since_last < self.min_update_interval_seconds:
+                logger.debug(
+                    f"Throttling SL update for {order_id}: "
+                    f"Only {time_since_last:.1f}s since last update (min: {self.min_update_interval_seconds}s)"
+                )
+                return False
+        
+        # Check if new SL value is different from last value
+        if order_id in self.last_sl_values:
+            if abs(new_stop_loss - self.last_sl_values[order_id]) < 0.01:  # 1 cent tolerance
+                logger.debug(f"Skipping duplicate SL update for {order_id}: {new_stop_loss}")
+                return False
+        
+        # Proceed with the update
+        try:
+            success = self._update_stop_loss(order_id, position, new_stop_loss, move_index, trigger_level, sl_offset)
+        except Exception as e:
+            logger.error(f"Failed to update stop loss for {order_id} after retries: {e}")
+            return False
+        
+        if success:
+            # Update tracking variables
+            self.last_update_times[order_id] = current_time
+            self.last_sl_values[order_id] = new_stop_loss
+            logger.debug(f"Throttled SL update successful for {order_id}: {new_stop_loss}")
+        
+        return success
+
+    @retry_api_call(max_retries=3, delay=0.5, backoff=1.5)
+    def _update_stop_loss(self, order_id: str, position: PositionState, 
+                         new_stop_loss: float, move_index: int, 
+                         trigger_level: float, sl_offset: float) -> bool:
+        """Update stop loss via API (original implementation)."""
+        update_request = {
+            "orderId": order_id,
+            "quantity": position.quantity,
+            "limitPrice": 0.0,
+            "stopPrice": 0.0,
+            "stopLoss": new_stop_loss,
+            "takeProfit": 0.0,
+            "stopLossOffset": 0.0,
+            "takeProfitOffset": 0.0,
+            "trailingStop": 0.0
+        }
+
+        response = self.client.update_order(
+            self.account_id,
+            order_id,
+            update_request
+        )
+
+        # Update state
+        position.current_stop_loss = new_stop_loss
+        position.breakeven_moves_completed += 1
+
+        logger.info(
+            f"Auto breakeven move {move_index + 1} executed for {order_id}: "
+            f"SL moved to {new_stop_loss} (trigger: {trigger_level}, offset: {sl_offset})"
+        )
+
+        return True
+
 
 
 # ==================== Running Take Profit Manager ====================
@@ -283,6 +436,38 @@ class RunningTPManager:
         self.client = client
         self.account_id = account_id
         self.managed_positions: Dict[str, tuple[PositionState, RunningTPConfig]] = {}
+        
+        # Throttling to prevent excessive API calls
+        self.last_update_times: Dict[str, float] = {}  # order_id -> timestamp
+        self.min_update_interval_seconds = 10.0  # Minimum 10 seconds between updates
+        self.last_tp_values: Dict[str, float] = {}  # Track last TP to avoid duplicate updates
+
+    def _validate_position(self, order_id: str, current_price: float) -> tuple[bool, str]:
+        """Validate position state and market conditions.
+        
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        if order_id not in self.managed_positions:
+            return False, f"Position {order_id} not found in managed positions"
+        
+        position, config = self.managed_positions[order_id]
+        
+        if not config.enabled:
+            return False, f"Running TP disabled for {order_id}"
+        
+        if current_price <= 0:
+            return False, f"Invalid current price: {current_price}"
+        
+        if position.entry_price <= 0:
+            return False, f"Invalid entry price: {position.entry_price}"
+        
+        # Check for reasonable price range (not more than 50% deviation)
+        price_deviation = abs(current_price - position.entry_price) / position.entry_price
+        if price_deviation > 0.5:
+            return False, f"Current price {current_price} too far from entry {position.entry_price} (deviation: {price_deviation:.1%})"
+        
+        return True, ""
 
     def start_monitoring(self, order_id: str, position: PositionState, config: RunningTPConfig):
         """Start monitoring a position for running TP.
@@ -297,6 +482,13 @@ class RunningTPManager:
             return
 
         self.managed_positions[order_id] = (position, config)
+        
+        # Initialize throttling tracking for this position
+        if order_id not in self.last_update_times:
+            self.last_update_times[order_id] = 0.0
+        if order_id not in self.last_tp_values:
+            self.last_tp_values[order_id] = position.current_take_profit or 0.0
+            
         logger.info(f"Started running TP monitoring for {order_id}")
 
     def stop_monitoring(self, order_id: str):
@@ -307,6 +499,11 @@ class RunningTPManager:
         """
         if order_id in self.managed_positions:
             del self.managed_positions[order_id]
+            
+            # Clean up throttling tracking
+            self.last_update_times.pop(order_id, None)
+            self.last_tp_values.pop(order_id, None)
+            
             logger.info(f"Stopped running TP monitoring for {order_id}")
 
     def check_and_update(self, order_id: str, current_price: float) -> bool:
@@ -319,7 +516,10 @@ class RunningTPManager:
         Returns:
             True if TP was updated, False otherwise
         """
-        if order_id not in self.managed_positions:
+        # Validate position state and market conditions
+        is_valid, error_msg = self._validate_position(order_id, current_price)
+        if not is_valid:
+            logger.debug(f"Position validation failed for {order_id}: {error_msg}")
             return False
 
         position, config = self.managed_positions[order_id]
@@ -342,9 +542,9 @@ class RunningTPManager:
                 new_tp = tp_from_profit_levels
                 should_update = True
 
-        # Update TP if triggered
+        # Apply throttling and duplicate prevention
         if should_update and new_tp:
-            return self._update_take_profit(order_id, position, new_tp)
+            return self._update_take_profit_with_throttling(order_id, position, new_tp)
 
         return False
 
@@ -450,32 +650,71 @@ class RunningTPManager:
         else:
             return new_tp < current_tp
 
+    @retry_api_call(max_retries=3, delay=0.5, backoff=1.5)
     def _update_take_profit(self, order_id: str, position: PositionState, new_tp: float) -> bool:
         """Update take profit via API."""
-        try:
-            update_request = {
+        update_request = {
                 "orderId": order_id,
                 "quantity": position.quantity,
-                "takeProfit": new_tp
+                "limitPrice": 0.0,
+                "stopPrice": 0.0,
+                "stopLoss": new_tp,
+                "takeProfit": 0.0,
+                "stopLossOffset": 0.0,
+                "takeProfitOffset": 0.0,
+                "trailingStop": 0.0
             }
 
-            response = self.client.update_order(
-                self.account_id,
-                order_id,
-                update_request
-            )
+        response = self.client.update_order(
+            self.account_id,
+            order_id,
+            update_request
+        )
 
-            old_tp = position.current_take_profit
-            position.current_take_profit = new_tp
-            position.tp_moves_completed += 1
+        old_tp = position.current_take_profit
+        position.current_take_profit = new_tp
+        position.tp_moves_completed += 1
 
-            logger.info(
-                f"Running TP updated for {order_id}: {old_tp} → {new_tp} "
-                f"(move #{position.tp_moves_completed})"
-            )
+        logger.info(
+            f"Running TP updated for {order_id}: {old_tp} → {new_tp} "
+            f"(move #{position.tp_moves_completed})"
+        )
 
-            return True
+        return True
 
+    def _update_take_profit_with_throttling(self, order_id: str, position: PositionState, new_tp: float) -> bool:
+        """Update take profit with throttling to prevent excessive API calls."""
+        import time
+        
+        current_time = time.time()
+        
+        # Check if enough time has passed since last update
+        if order_id in self.last_update_times:
+            time_since_last = current_time - self.last_update_times[order_id]
+            if time_since_last < self.min_update_interval_seconds:
+                logger.debug(
+                    f"Throttling TP update for {order_id}: "
+                    f"Only {time_since_last:.1f}s since last update (min: {self.min_update_interval_seconds}s)"
+                )
+                return False
+        
+        # Check if new TP value is different from last value
+        if order_id in self.last_tp_values:
+            if abs(new_tp - self.last_tp_values[order_id]) < 0.01:  # 1 cent tolerance
+                logger.debug(f"Skipping duplicate TP update for {order_id}: {new_tp}")
+                return False
+        
+        # Proceed with the update
+        try:
+            success = self._update_take_profit(order_id, position, new_tp)
         except Exception as e:
-            logger.error(f"Failed to update take profit for {order_id}: {e}")
+            logger.error(f"Failed to update take profit for {order_id} after retries: {e}")
             return False
+        
+        if success:
+            # Update tracking variables
+            self.last_update_times[order_id] = current_time
+            self.last_tp_values[order_id] = new_tp
+            logger.debug(f"Throttled TP update successful for {order_id}: {new_tp}")
+        
+        return success

@@ -1,3 +1,4 @@
+from binascii import Error
 from pydantic import BaseModel, Field, field_validator, AliasChoices
 from typing import List, Optional, Union, Literal
 from enum import Enum
@@ -269,6 +270,32 @@ class OrderError(BaseModel):
 
     class Config:
         populate_by_name = True
+
+class OrderStatusResponse(BaseModel):
+    message: Optional[str] = None
+    order_id: str = Field("", alias='orderId')
+    strategy_id: Optional[Union[str, int]] = Field(None, alias='strategyId')
+    parent_order_id: Optional[Union[str, int]] = Field(None, alias='parentOrderId')
+    account_id: str = Field(..., alias='accountId')
+    exch_sym: str = Field(..., alias='exchSym')
+    status: str
+    side: str
+    quantity: float
+    limit_price: Optional[float] = Field(None, alias='limitPrice')
+    stop_price: Optional[float] = Field(None, alias='stopPrice')
+    order_type: str = Field(..., alias='orderType')
+    duration: str
+    fill_quantity: Optional[float] = Field(None, alias='fillQuantity')
+    fill_price: Optional[float] = Field(None, alias='fillPrice')
+    fill_date: Optional[str] = Field(None, alias='fillDate')
+    child_orders: Optional[List[str]] = Field(None, alias='childOrders')
+    order_error: Optional[OrderError] = Field(None, alias='orderError')
+    error_code: Optional[int] = Field(None, alias='errorCode')
+    error_text: Optional[str] = Field(None, alias='errorText')
+  
+    class Config:
+        populate_by_name = True
+
 
 class Order(BaseModel):
     """Order model - matches actual API responses."""
